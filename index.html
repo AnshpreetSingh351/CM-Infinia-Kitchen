@@ -204,6 +204,30 @@ html,body{height:100%;overflow:hidden;background:var(--dark);font-family:'Sora',
 }
 .book-float:hover{background:var(--gold);color:var(--dark)}
 
+/* ── SOUND TOGGLE ── */
+.sound-btn{
+  position:fixed;top:1.2rem;right:1.5rem;z-index:20;
+  width:36px;height:36px;border-radius:50%;
+  background:rgba(196,162,101,.06);border:1px solid rgba(196,162,101,.18);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;color:var(--gold);transition:all .3s;
+  backdrop-filter:blur(6px);
+}
+.sound-btn:hover{background:rgba(196,162,101,.15);border-color:var(--gold)}
+.sound-btn svg{width:14px;height:14px}
+.sound-bars{display:flex;align-items:flex-end;gap:2px;height:12px}
+.sound-bars span{
+  width:2px;background:var(--gold);border-radius:1px;
+  animation:barAnim 1.2s ease-in-out infinite;
+}
+.sound-bars span:nth-child(1){height:4px;animation-delay:0s}
+.sound-bars span:nth-child(2){height:8px;animation-delay:.15s}
+.sound-bars span:nth-child(3){height:5px;animation-delay:.3s}
+.sound-bars span:nth-child(4){height:10px;animation-delay:.1s}
+@keyframes barAnim{0%,100%{height:3px}50%{height:11px}}
+.sound-btn.muted .sound-bars span{animation:none;height:2px;opacity:.3}
+
+
 @media(max-width:480px){
   .top-section{padding:.8rem 1rem .6rem}
   .logo{font-size:1.05rem}
@@ -217,6 +241,7 @@ html,body{height:100%;overflow:hidden;background:var(--dark);font-family:'Sora',
   .explore-btn{align-self:stretch;justify-content:center;padding:.6rem 1.2rem;font-size:.58rem}
   .deg-float{top:.5rem;right:.8rem}
   .exp-bot{padding:1rem;flex-direction:column;gap:.6rem;align-items:flex-start}
+  .sound-btn{top:.7rem;right:.8rem;width:32px;height:32px}
 }
 @media(max-width:380px){
   .top-section{padding:.6rem .8rem .5rem}
@@ -276,6 +301,11 @@ html,body{height:100%;overflow:hidden;background:var(--dark);font-family:'Sora',
     </button>
   </div>
 </div>
+
+<!-- Sound toggle -->
+<button class="sound-btn" id="soundBtn" title="Toggle Sound">
+  <div class="sound-bars"><span></span><span></span><span></span><span></span></div>
+</button>
 
 <!-- Expanded fullscreen UI -->
 <div class="expanded-ui" id="expUI">
@@ -369,6 +399,149 @@ document.getElementById('closeBtn').addEventListener('click',()=>{
 });
 
 window.addEventListener('resize',()=>{W=window.innerWidth;H=window.innerHeight;if(img1.offsetWidth)imgW=img1.offsetWidth;update()});
+
+// ── AMBIENT AUDIO ENGINE ──
+const soundBtn=document.getElementById('soundBtn');
+let audioCtx=null, audioStarted=false, audioMuted=false;
+let masterGain=null;
+
+function createAmbient(){
+  audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  masterGain=audioCtx.createGain();
+  masterGain.gain.setValueAtTime(0,audioCtx.currentTime);
+  masterGain.gain.linearRampToValueAtTime(0.25,audioCtx.currentTime+3);
+  masterGain.connect(audioCtx.destination);
+
+  // Reverb via convolver
+  const convolver=audioCtx.createConvolver();
+  const reverbLen=3*audioCtx.sampleRate;
+  const reverbBuf=audioCtx.createBuffer(2,reverbLen,audioCtx.sampleRate);
+  for(let ch=0;ch<2;ch++){
+    const d=reverbBuf.getChannelData(ch);
+    for(let i=0;i<reverbLen;i++){
+      d[i]=(Math.random()*2-1)*Math.pow(1-i/reverbLen,2.5);
+    }
+  }
+  convolver.buffer=reverbBuf;
+  convolver.connect(masterGain);
+
+  // Dry/wet mix
+  const dryGain=audioCtx.createGain();
+  dryGain.gain.value=0.3;
+  dryGain.connect(masterGain);
+  const wetGain=audioCtx.createGain();
+  wetGain.gain.value=0.7;
+  wetGain.connect(convolver);
+
+  // Pad chords — soft sine waves with slow LFO
+  const notes=[130.81,164.81,196.00,261.63,329.63]; // C3,E3,G3,C4,E4
+  notes.forEach((freq,i)=>{
+    const osc=audioCtx.createOscillator();
+    osc.type='sine';
+    osc.frequency.value=freq;
+
+    // Slow detune LFO for movement
+    const lfo=audioCtx.createOscillator();
+    lfo.type='sine';
+    lfo.frequency.value=0.08+i*0.02;
+    const lfoGain=audioCtx.createGain();
+    lfoGain.gain.value=3+i*0.5;
+    lfo.connect(lfoGain);
+    lfoGain.connect(osc.detune);
+    lfo.start();
+
+    // Volume per note
+    const noteGain=audioCtx.createGain();
+    noteGain.gain.value=0.06-i*0.008;
+
+    // Slow volume swell
+    const swellLfo=audioCtx.createOscillator();
+    swellLfo.type='sine';
+    swellLfo.frequency.value=0.03+i*0.01;
+    const swellGain=audioCtx.createGain();
+    swellGain.gain.value=0.025;
+    swellLfo.connect(swellGain);
+    swellGain.connect(noteGain.gain);
+    swellLfo.start();
+
+    osc.connect(noteGain);
+    noteGain.connect(dryGain);
+    noteGain.connect(wetGain);
+    osc.start();
+  });
+
+  // Soft filtered noise — like air/room tone
+  const noiseBuf=audioCtx.createBuffer(1,2*audioCtx.sampleRate,audioCtx.sampleRate);
+  const noiseData=noiseBuf.getChannelData(0);
+  for(let i=0;i<noiseData.length;i++)noiseData[i]=Math.random()*2-1;
+  const noiseSrc=audioCtx.createBufferSource();
+  noiseSrc.buffer=noiseBuf;
+  noiseSrc.loop=true;
+  const noiseFilter=audioCtx.createBiquadFilter();
+  noiseFilter.type='lowpass';
+  noiseFilter.frequency.value=400;
+  noiseFilter.Q.value=0.5;
+  const noiseGain=audioCtx.createGain();
+  noiseGain.gain.value=0.015;
+  noiseSrc.connect(noiseFilter);
+  noiseFilter.connect(noiseGain);
+  noiseGain.connect(wetGain);
+  noiseSrc.start();
+
+  // Gentle high chime pings every few seconds
+  function chime(){
+    if(audioMuted||!audioCtx)return;
+    const chimFreqs=[523.25,659.25,783.99,1046.50];
+    const f=chimFreqs[Math.floor(Math.random()*chimFreqs.length)];
+    const o=audioCtx.createOscillator();
+    o.type='sine';
+    o.frequency.value=f;
+    const g=audioCtx.createGain();
+    g.gain.setValueAtTime(0,audioCtx.currentTime);
+    g.gain.linearRampToValueAtTime(0.03,audioCtx.currentTime+0.3);
+    g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+3);
+    o.connect(g);
+    g.connect(wetGain);
+    o.start();
+    o.stop(audioCtx.currentTime+3.5);
+    setTimeout(chime,4000+Math.random()*6000);
+  }
+  setTimeout(chime,2000);
+
+  audioStarted=true;
+}
+
+function toggleAudio(){
+  if(!audioStarted){
+    createAmbient();
+    soundBtn.classList.remove('muted');
+    return;
+  }
+  if(audioMuted){
+    audioMuted=false;
+    masterGain.gain.linearRampToValueAtTime(0.25,audioCtx.currentTime+0.5);
+    soundBtn.classList.remove('muted');
+    if(audioCtx.state==='suspended')audioCtx.resume();
+  }else{
+    audioMuted=true;
+    masterGain.gain.linearRampToValueAtTime(0,audioCtx.currentTime+0.5);
+    soundBtn.classList.add('muted');
+  }
+}
+
+soundBtn.addEventListener('click',toggleAudio);
+
+// Auto-start on first interaction (browser requirement)
+function autoStartAudio(){
+  if(!audioStarted){
+    createAmbient();
+  }
+  document.removeEventListener('click',autoStartAudio);
+  document.removeEventListener('touchstart',autoStartAudio);
+}
+document.addEventListener('click',autoStartAudio);
+document.addEventListener('touchstart',autoStartAudio);
+
 </script>
 </body>
 </html>
