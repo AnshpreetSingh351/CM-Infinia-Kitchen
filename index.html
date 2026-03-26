@@ -15,12 +15,12 @@ html,body{height:100%;overflow:hidden;background:var(--dark);font-family:'Sora',
 
 /* ── TOP SECTION ── */
 .top-section{
-  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
-  padding-bottom:1.2rem;position:relative;z-index:5;min-height:0;
+  flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+  padding:1.2rem 1.5rem 1rem;position:relative;z-index:5;
 }
 .logo-row{
-  position:absolute;top:1.2rem;left:1.5rem;right:1.5rem;
   display:flex;justify-content:space-between;align-items:center;
+  width:100%;margin-bottom:.8rem;
 }
 .logo{font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:700;letter-spacing:.02em}
 .logo span{color:var(--gold)}
@@ -44,11 +44,11 @@ html,body{height:100%;overflow:hidden;background:var(--dark);font-family:'Sora',
 
 /* ── PANORAMA STRIP ── */
 .pano-section{
-  height:38%;min-height:220px;
+  flex:1;min-height:0;
   position:relative;overflow:hidden;
-  transition:height .9s cubic-bezier(.4,0,.2,1), min-height .9s cubic-bezier(.4,0,.2,1);
+  transition:height .9s cubic-bezier(.4,0,.2,1), min-height .9s cubic-bezier(.4,0,.2,1), flex .9s cubic-bezier(.4,0,.2,1);
 }
-.pano-section.expanded{height:100%;min-height:100%}
+.pano-section.expanded{position:fixed;inset:0;z-index:15;height:100%;flex:none}
 
 /* Golden border lines */
 .pano-section::before,.pano-section::after{
@@ -205,23 +205,28 @@ html,body{height:100%;overflow:hidden;background:var(--dark);font-family:'Sora',
 .book-float:hover{background:var(--gold);color:var(--dark)}
 
 @media(max-width:480px){
-  .top-section{flex:0 0 auto;padding-bottom:1rem;padding-top:3.2rem}
-  .logo-row{top:.8rem;left:1rem;right:1rem}
-  .tl-main{font-size:clamp(1.6rem,6.5vw,2.4rem)}
-  .tl-sub{margin-bottom:.35rem}
-  .tagline{padding:0 1rem}
-  .pano-section{height:45%;min-height:200px}
-  .bot-section{flex-direction:column;gap:.8rem;align-items:flex-start;padding:1rem 1.2rem}
-  .explore-btn{align-self:stretch;justify-content:center}
+  .top-section{padding:.8rem 1rem .6rem}
+  .logo{font-size:1.05rem}
+  .logo-row{margin-bottom:.5rem}
+  .tl-main{font-size:clamp(1.5rem,6.5vw,2.2rem)}
+  .tl-sub{margin-bottom:.25rem;font-size:.38rem}
+  .tagline{padding:0 .5rem}
+  .bot-section{flex-direction:column;gap:.5rem;align-items:flex-start;padding:.7rem 1rem}
+  .bot-big{font-size:.85rem}
+  .bot-small{font-size:.35rem}
+  .explore-btn{align-self:stretch;justify-content:center;padding:.6rem 1.2rem;font-size:.58rem}
+  .deg-float{top:.5rem;right:.8rem}
+  .exp-bot{padding:1rem;flex-direction:column;gap:.6rem;align-items:flex-start}
 }
 @media(max-width:380px){
-  .top-section{padding-top:2.8rem;padding-bottom:.7rem}
-  .tl-main{font-size:1.5rem}
-  .pano-section{height:48%;min-height:180px}
+  .top-section{padding:.6rem .8rem .5rem}
+  .tl-main{font-size:1.35rem}
+  .bot-section{padding:.5rem .8rem}
+  .logo-row{margin-bottom:.3rem}
 }
 @media(min-width:768px){
-  .pano-section{height:42%;min-height:300px}
-  .top-section{padding-bottom:2rem}
+  .top-section{padding:1.8rem 2.5rem 1.5rem}
+  .logo-row{margin-bottom:1rem}
 }
 </style>
 </head>
