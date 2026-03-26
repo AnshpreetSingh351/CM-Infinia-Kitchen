@@ -409,7 +409,7 @@ function createAmbient(){
   audioCtx=new(window.AudioContext||window.webkitAudioContext)();
   masterGain=audioCtx.createGain();
   masterGain.gain.setValueAtTime(0,audioCtx.currentTime);
-  masterGain.gain.linearRampToValueAtTime(0.25,audioCtx.currentTime+3);
+  masterGain.gain.linearRampToValueAtTime(1.0,audioCtx.currentTime+3);
   masterGain.connect(audioCtx.destination);
 
   // Reverb via convolver
@@ -427,10 +427,10 @@ function createAmbient(){
 
   // Dry/wet mix
   const dryGain=audioCtx.createGain();
-  dryGain.gain.value=0.3;
+  dryGain.gain.value=0.5;
   dryGain.connect(masterGain);
   const wetGain=audioCtx.createGain();
-  wetGain.gain.value=0.7;
+  wetGain.gain.value=0.9;
   wetGain.connect(convolver);
 
   // Pad chords — soft sine waves with slow LFO
@@ -452,14 +452,14 @@ function createAmbient(){
 
     // Volume per note
     const noteGain=audioCtx.createGain();
-    noteGain.gain.value=0.06-i*0.008;
+    noteGain.gain.value=0.22-i*0.02;
 
     // Slow volume swell
     const swellLfo=audioCtx.createOscillator();
     swellLfo.type='sine';
     swellLfo.frequency.value=0.03+i*0.01;
     const swellGain=audioCtx.createGain();
-    swellGain.gain.value=0.025;
+    swellGain.gain.value=0.1;
     swellLfo.connect(swellGain);
     swellGain.connect(noteGain.gain);
     swellLfo.start();
@@ -482,7 +482,7 @@ function createAmbient(){
   noiseFilter.frequency.value=400;
   noiseFilter.Q.value=0.5;
   const noiseGain=audioCtx.createGain();
-  noiseGain.gain.value=0.015;
+  noiseGain.gain.value=0.08;
   noiseSrc.connect(noiseFilter);
   noiseFilter.connect(noiseGain);
   noiseGain.connect(wetGain);
@@ -498,7 +498,7 @@ function createAmbient(){
     o.frequency.value=f;
     const g=audioCtx.createGain();
     g.gain.setValueAtTime(0,audioCtx.currentTime);
-    g.gain.linearRampToValueAtTime(0.03,audioCtx.currentTime+0.3);
+    g.gain.linearRampToValueAtTime(0.15,audioCtx.currentTime+0.3);
     g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+3);
     o.connect(g);
     g.connect(wetGain);
@@ -519,7 +519,7 @@ function toggleAudio(){
   }
   if(audioMuted){
     audioMuted=false;
-    masterGain.gain.linearRampToValueAtTime(0.25,audioCtx.currentTime+0.5);
+    masterGain.gain.linearRampToValueAtTime(1.0,audioCtx.currentTime+0.5);
     soundBtn.classList.remove('muted');
     if(audioCtx.state==='suspended')audioCtx.resume();
   }else{
