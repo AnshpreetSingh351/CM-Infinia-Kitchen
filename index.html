@@ -400,141 +400,99 @@ document.getElementById('closeBtn').addEventListener('click',()=>{
 
 window.addEventListener('resize',()=>{W=window.innerWidth;H=window.innerHeight;if(img1.offsetWidth)imgW=img1.offsetWidth;update()});
 
-// ── AMBIENT AUDIO ENGINE ──
+// ── AMBIENT AUDIO (Mobile-fix: create+resume inside gesture) ──
 const soundBtn=document.getElementById('soundBtn');
-let audioCtx=null, audioStarted=false, audioMuted=false;
-let masterGain=null;
+let audioCtx=null,audioStarted=false,audioMuted=false,masterGain=null,wetG=null;
 
-function createAmbient(){
-  audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+function startAudio(){
+  if(audioStarted)return;
+  audioStarted=true;
+  try{audioCtx=new(window.AudioContext||window.webkitAudioContext)()}catch(e){audioStarted=false;return}
+  // iOS/Android: must resume inside user gesture
+  const p=audioCtx.resume();
+  if(p&&p.then)p.then(buildSound).catch(()=>{});
+  else buildSound();
+}
+
+function buildSound(){
   masterGain=audioCtx.createGain();
-  masterGain.gain.setValueAtTime(0,audioCtx.currentTime);
-  masterGain.gain.linearRampToValueAtTime(1.0,audioCtx.currentTime+2);
+  masterGain.gain.value=1.0;
   masterGain.connect(audioCtx.destination);
 
-  // Long reverb
-  const convolver=audioCtx.createConvolver();
-  const reverbLen=4*audioCtx.sampleRate;
-  const reverbBuf=audioCtx.createBuffer(2,reverbLen,audioCtx.sampleRate);
-  for(let ch=0;ch<2;ch++){
-    const d=reverbBuf.getChannelData(ch);
-    for(let i=0;i<reverbLen;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/reverbLen,2);
-  }
-  convolver.buffer=reverbBuf;
-  convolver.connect(masterGain);
+  // Compressor for loudness
+  const comp=audioCtx.createDynamicsCompressor();
+  comp.threshold.value=-15;comp.knee.value=10;comp.ratio.value=6;
+  comp.attack.value=0.003;comp.release.value=0.2;
+  comp.connect(masterGain);
 
-  const wetGain=audioCtx.createGain();
-  wetGain.gain.value=0.8;
-  wetGain.connect(convolver);
-  const dryGain=audioCtx.createGain();
-  dryGain.gain.value=0.4;
-  dryGain.connect(masterGain);
+  // Reverb
+  const conv=audioCtx.createConvolver();
+  const rLen=4*audioCtx.sampleRate;
+  const rBuf=audioCtx.createBuffer(2,rLen,audioCtx.sampleRate);
+  for(let c=0;c<2;c++){const d=rBuf.getChannelData(c);for(let i=0;i<rLen;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/rLen,2)}
+  conv.buffer=rBuf;conv.connect(comp);
 
-  // Warm triangle wave pad — steady, no vibration
-  const padNotes=[174.61,220.00,261.63,329.63,392.00]; // F3,A3,C4,E4,G4
-  padNotes.forEach((freq,i)=>{
-    const osc=audioCtx.createOscillator();
-    osc.type='triangle';
-    osc.frequency.value=freq;
-    const g=audioCtx.createGain();
-    g.gain.value=0.18-i*0.02;
-    osc.connect(g);
-    g.connect(dryGain);
-    g.connect(wetGain);
-    osc.start();
+  wetG=audioCtx.createGain();wetG.gain.value=1.0;wetG.connect(conv);
+  const dryG=audioCtx.createGain();dryG.gain.value=0.7;dryG.connect(comp);
+
+  // Warm pad — triangle, steady, NO vibration/LFO
+  [174.61,220.00,261.63,329.63,392.00].forEach((f,i)=>{
+    const o=audioCtx.createOscillator();o.type='triangle';o.frequency.value=f;
+    const g=audioCtx.createGain();g.gain.value=0.28-i*0.03;
+    o.connect(g);g.connect(dryG);g.connect(wetG);o.start();
   });
 
-  // Deep sub bass hum
-  const sub=audioCtx.createOscillator();
-  sub.type='sine';
-  sub.frequency.value=65.41; // C2
-  const subG=audioCtx.createGain();
-  subG.gain.value=0.15;
-  sub.connect(subG);
-  subG.connect(dryGain);
-  sub.start();
+  // Sub bass
+  const sub=audioCtx.createOscillator();sub.type='sine';sub.frequency.value=65.41;
+  const sg=audioCtx.createGain();sg.gain.value=0.22;
+  sub.connect(sg);sg.connect(dryG);sub.start();
 
-  // Warm filtered noise — room ambience
-  const nBuf=audioCtx.createBuffer(1,3*audioCtx.sampleRate,audioCtx.sampleRate);
-  const nD=nBuf.getChannelData(0);
-  for(let i=0;i<nD.length;i++) nD[i]=Math.random()*2-1;
-  const nSrc=audioCtx.createBufferSource();
-  nSrc.buffer=nBuf;nSrc.loop=true;
-  const nFilt=audioCtx.createBiquadFilter();
-  nFilt.type='lowpass';nFilt.frequency.value=300;nFilt.Q.value=0.3;
-  const nG=audioCtx.createGain();
-  nG.gain.value=0.06;
-  nSrc.connect(nFilt);nFilt.connect(nG);nG.connect(wetGain);
-  nSrc.start();
+  // Room noise
+  const nb=audioCtx.createBuffer(1,3*audioCtx.sampleRate,audioCtx.sampleRate);
+  const nd=nb.getChannelData(0);for(let i=0;i<nd.length;i++)nd[i]=Math.random()*2-1;
+  const ns=audioCtx.createBufferSource();ns.buffer=nb;ns.loop=true;
+  const nf=audioCtx.createBiquadFilter();nf.type='lowpass';nf.frequency.value=350;
+  const ng=audioCtx.createGain();ng.gain.value=0.1;
+  ns.connect(nf);nf.connect(ng);ng.connect(wetG);ns.start();
 
-  // Piano-like bell tones repeating
+  // Bell tones
   function bell(){
-    if(audioMuted||!audioCtx)return;
-    const bellFreqs=[523.25,587.33,659.25,783.99,880.00,1046.50];
-    const f=bellFreqs[Math.floor(Math.random()*bellFreqs.length)];
-    const o=audioCtx.createOscillator();
-    o.type='sine';
-    o.frequency.value=f;
-    // Second harmonic for richness
-    const o2=audioCtx.createOscillator();
-    o2.type='sine';
-    o2.frequency.value=f*2;
-    const g=audioCtx.createGain();
-    g.gain.setValueAtTime(0,audioCtx.currentTime);
-    g.gain.linearRampToValueAtTime(0.2,audioCtx.currentTime+0.05);
-    g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+4);
-    const g2=audioCtx.createGain();
-    g2.gain.setValueAtTime(0,audioCtx.currentTime);
-    g2.gain.linearRampToValueAtTime(0.06,audioCtx.currentTime+0.02);
-    g2.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+2);
-    o.connect(g);g.connect(wetGain);
-    o2.connect(g2);g2.connect(wetGain);
-    o.start();o2.start();
-    o.stop(audioCtx.currentTime+5);o2.stop(audioCtx.currentTime+3);
-    setTimeout(bell,3000+Math.random()*4000);
+    if(audioMuted||!audioCtx||audioCtx.state!=='running'){setTimeout(bell,3000);return}
+    const t=audioCtx.currentTime;
+    const f=[523.25,587.33,659.25,783.99,880,1046.5][Math.floor(Math.random()*6)];
+    const o=audioCtx.createOscillator();o.type='sine';o.frequency.value=f;
+    const o2=audioCtx.createOscillator();o2.type='sine';o2.frequency.value=f*2;
+    const g=audioCtx.createGain();g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(0.35,t+0.03);g.gain.exponentialRampToValueAtTime(0.001,t+4);
+    const g2=audioCtx.createGain();g2.gain.setValueAtTime(0,t);g2.gain.linearRampToValueAtTime(0.12,t+0.02);g2.gain.exponentialRampToValueAtTime(0.001,t+2);
+    o.connect(g);g.connect(wetG);o2.connect(g2);g2.connect(wetG);
+    o.start(t);o2.start(t);o.stop(t+5);o2.stop(t+3);
+    setTimeout(bell,2500+Math.random()*3000);
   }
-  setTimeout(bell,1500);
-
-  audioStarted=true;
+  setTimeout(bell,800);
 }
 
 function toggleAudio(){
-  if(!audioStarted){
-    createAmbient();
-    soundBtn.classList.remove('muted');
-    return;
-  }
+  if(!audioStarted){startAudio();soundBtn.classList.remove('muted');return}
+  if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();
   if(audioMuted){
     audioMuted=false;
-    masterGain.gain.linearRampToValueAtTime(1.0,audioCtx.currentTime+0.5);
+    if(masterGain){const t=audioCtx.currentTime;masterGain.gain.cancelScheduledValues(t);masterGain.gain.setValueAtTime(masterGain.gain.value,t);masterGain.gain.linearRampToValueAtTime(1.0,t+0.2)}
     soundBtn.classList.remove('muted');
-    if(audioCtx.state==='suspended')audioCtx.resume();
   }else{
     audioMuted=true;
-    masterGain.gain.linearRampToValueAtTime(0,audioCtx.currentTime+0.5);
+    if(masterGain){const t=audioCtx.currentTime;masterGain.gain.cancelScheduledValues(t);masterGain.gain.setValueAtTime(masterGain.gain.value,t);masterGain.gain.linearRampToValueAtTime(0,t+0.2)}
     soundBtn.classList.add('muted');
   }
 }
+soundBtn.addEventListener('click',function(e){e.stopPropagation();toggleAudio()});
 
-soundBtn.addEventListener('click',toggleAudio);
-
-// Auto-start immediately on any interaction (browser requires it)
-function autoStartAudio(){
-  if(!audioStarted) createAmbient();
-  document.removeEventListener('click',autoStartAudio);
-  document.removeEventListener('touchstart',autoStartAudio);
-  document.removeEventListener('mousedown',autoStartAudio);
+// Unlock audio on FIRST user gesture (capture phase for reliability)
+function unlock(){
+  startAudio();
+  if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();
+  ['touchstart','touchend','click','mousedown','keydown'].forEach(e=>document.removeEventListener(e,unlock,true));
 }
-document.addEventListener('click',autoStartAudio);
-document.addEventListener('touchstart',autoStartAudio);
-document.addEventListener('mousedown',autoStartAudio);
-
-// Also try on page load (some browsers allow it)
-window.addEventListener('load',()=>{
-  if(!audioStarted){
-    try{createAmbient()}catch(e){}
-  }
-});
+['touchstart','touchend','click','mousedown','keydown'].forEach(e=>document.addEventListener(e,unlock,true));
 
 </script>
 </body>
