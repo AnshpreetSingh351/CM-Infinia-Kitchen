@@ -16,7 +16,7 @@ html,body{height:100%;overflow:hidden;background:var(--dark);font-family:'Sora',
 /* ── TOP SECTION ── */
 .top-section{
   flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
-  padding-bottom:1.5rem;position:relative;z-index:5;
+  padding-bottom:1.2rem;position:relative;z-index:5;min-height:0;
 }
 .logo-row{
   position:absolute;top:1.2rem;left:1.5rem;right:1.5rem;
@@ -205,9 +205,19 @@ html,body{height:100%;overflow:hidden;background:var(--dark);font-family:'Sora',
 .book-float:hover{background:var(--gold);color:var(--dark)}
 
 @media(max-width:480px){
-  .pano-section{height:35%;min-height:180px}
-  .bot-section{flex-direction:column;gap:1rem;align-items:flex-start}
+  .top-section{flex:0 0 auto;padding-bottom:1rem;padding-top:3.2rem}
+  .logo-row{top:.8rem;left:1rem;right:1rem}
+  .tl-main{font-size:clamp(1.6rem,6.5vw,2.4rem)}
+  .tl-sub{margin-bottom:.35rem}
+  .tagline{padding:0 1rem}
+  .pano-section{height:45%;min-height:200px}
+  .bot-section{flex-direction:column;gap:.8rem;align-items:flex-start;padding:1rem 1.2rem}
   .explore-btn{align-self:stretch;justify-content:center}
+}
+@media(max-width:380px){
+  .top-section{padding-top:2.8rem;padding-bottom:.7rem}
+  .tl-main{font-size:1.5rem}
+  .pano-section{height:48%;min-height:180px}
 }
 @media(min-width:768px){
   .pano-section{height:42%;min-height:300px}
